@@ -28,10 +28,17 @@ def get_sentiment(text):
 
 def fetch_reddit_posts(ticker, limit=100):
     posts = []
-    for subreddit in ["stocks", "wallstreetbets", "investing"]:
-        for submission in reddit.subreddit(subreddit).search(ticker, limit=limit):
-            posts.append(submission.title + " " + submission.selftext)
-    return posts[:limit]
+    # Combine subreddits into one query string
+    subreddit_names = "stocks+wallstreetbets+investing"
+    
+    # Get the combined subreddit object
+    subreddit = reddit.subreddit(subreddit_names)
+    
+    # Search across all three, sorting by 'new'
+    for submission in subreddit.search(ticker, sort="new", limit=limit):
+        posts.append(submission.title + " " + submission.selftext)
+        
+    return posts
 
 # ---- STREAMLIT UI ----
 st.title("📈 Reddit Stock Sentiment Analyzer")
