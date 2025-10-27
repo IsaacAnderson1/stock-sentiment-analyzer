@@ -1,19 +1,21 @@
 import streamlit as st
 import pandas as pd
+import subprocess
 from transformers import pipeline
-import snscrape.modules.twitter as sntwitter
 from tqdm import tqdm
 
+# --- Helper: Fetch tweets using snscrape CLI ---
 @st.cache_data
 def fetch_tweets(ticker: str, limit: int = 100):
     query = f"${ticker} OR {ticker} lang:en -filter:retweets"
-    tweets = []
-    for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
-        if i >= limit:
-            break
-        tweets.append(tweet.content)
+    cmd = ["snscrape", "--max-results", str(limit), "twitter-search", query]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    # Each tweet text is on its own line
+    tweets = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     return tweets
 
+# --- Helper: Analyze sentiment using pretrained model ---
 @st.cache_data
 def analyze_sentiment(tweets: list):
     sentiment_model = pipeline(
@@ -26,12 +28,14 @@ def analyze_sentiment(tweets: list):
         results.append(res)
     return pd.DataFrame(results)
 
+# --- Streamlit app main ---
 def main():
     st.title("📊 Stock Tweet Sentiment Analyzer")
     st.write("""
-    Type in a **stock ticker** (like `AAPL`, `TSLA`, or `NVDA`) and get sentiment analysis from the
-    latest tweets about it.  
-    This uses **snscrape** to fetch tweets and a **Twitter-tuned RoBERTa model** for sentiment.
+    Type a **stock ticker** (e.g. AAPL, TSLA, NVDA)  
+    → Fetches latest tweets mentioning the ticker  
+    → Runs a fine-tuned sentiment model  
+    → Displays sentiment distribution + sample tweets
     """)
 
     ticker = st.text_input("Enter stock ticker:", "AAPL").upper().strip()
@@ -48,6 +52,7 @@ def main():
             df = analyze_sentiment(tweets)
 
         st.success(f"✅ Completed analysis on {len(tweets)} tweets.")
+
         st.subheader("Sentiment Summary")
         counts = df['label'].value_counts(normalize=True) * 100
         st.bar_chart(counts)
