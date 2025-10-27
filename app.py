@@ -6,8 +6,8 @@ import re
 # Create a Reddit app at https://www.reddit.com/prefs/apps
 # and paste your credentials here
 reddit = praw.Reddit(
-    client_id="htd89WnpCjFCHcVvxV8ZZw",
-    client_secret="puiIU7I5ShHYdo8S4izXn3dvSKtklg",
+    client_id="rR8y6HlQatpqsAi_rQ6RSg",
+    client_secret="MfQGKDlHm8R6i0jAFRLEeGYViq-cfg",
     user_agent="StockSentimentApp/1.0"
 )
 
