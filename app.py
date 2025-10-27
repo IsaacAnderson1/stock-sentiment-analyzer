@@ -1,93 +1,63 @@
 import streamlit as st
-import pandas as pd
-import subprocess
+import praw  # Reddit API wrapper
 import re
 
-# --- Simple keyword lists ---
-POSITIVE_WORDS = [
-    "good", "great", "amazing", "awesome", "bullish", "love",
-    "profit", "gain", "up", "strong", "buy", "moon", "pump"
-]
-NEGATIVE_WORDS = [
-    "bad", "terrible", "awful", "bearish", "hate", "loss",
-    "down", "weak", "sell", "crash", "dump"
-]
+# ---- CONFIGURE REDDIT API ----
+# Create a Reddit app at https://www.reddit.com/prefs/apps
+# and paste your credentials here
+reddit = praw.Reddit(
+    client_id="htd89WnpCjFCHcVvxV8ZZw",
+    client_secret="puiIU7I5ShHYdo8S4izXn3dvSKtklg",
+    user_agent="StockSentimentApp/1.0"
+)
 
-# --- Helper: Fetch tweets using snscrape CLI ---
-@st.cache_data
-def fetch_tweets(ticker: str, limit: int = 100):
-    query = f"${ticker} OR {ticker} lang:en -filter:retweets"
-    cmd = ["snscrape", "--max-results", str(limit), "twitter-search", query]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+# ---- BASIC SENTIMENT RULES ----
+positive_words = ["buy", "bull", "up", "gain", "moon", "green", "profit", "undervalued", "strong"]
+negative_words = ["sell", "bear", "down", "loss", "red", "crash", "overvalued", "weak"]
 
-    tweets = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    return tweets
-
-# --- Helper: Basic sentiment scoring ---
-def get_sentiment_score(text: str) -> int:
+def get_sentiment(text):
     text = text.lower()
-    score = 0
-    for w in POSITIVE_WORDS:
-        if re.search(rf"\b{w}\b", text):
-            score += 1
-    for w in NEGATIVE_WORDS:
-        if re.search(rf"\b{w}\b", text):
-            score -= 1
-    return score
+    pos = sum(word in text for word in positive_words)
+    neg = sum(word in text for word in negative_words)
+    if pos > neg:
+        return 1
+    elif neg > pos:
+        return -1
+    else:
+        return 0
 
-def analyze_sentiment(tweets):
-    results = []
-    for t in tweets:
-        score = get_sentiment_score(t)
-        label = "positive" if score > 0 else "negative" if score < 0 else "neutral"
-        results.append({"tweet": t, "score": score, "label": label})
-    return pd.DataFrame(results)
+def fetch_reddit_posts(ticker, limit=100):
+    posts = []
+    for subreddit in ["stocks", "wallstreetbets", "investing"]:
+        for submission in reddit.subreddit(subreddit).search(ticker, limit=limit):
+            posts.append(submission.title + " " + submission.selftext)
+    return posts[:limit]
 
-# --- Streamlit UI ---
-def main():
-    st.title("📊 Simple Stock Tweet Sentiment Analyzer")
-    st.write("""
-    Type a **stock ticker** (e.g. AAPL, TSLA, NVDA).  
-    This app fetches recent tweets mentioning that ticker,  
-    checks for positive/negative keywords, and assigns +1 or -1 to each tweet.
-    """)
+# ---- STREAMLIT UI ----
+st.title("📈 Reddit Stock Sentiment Analyzer")
 
-    ticker = st.text_input("Enter stock ticker:", "AAPL").upper().strip()
-    limit = st.slider("Number of tweets", min_value=20, max_value=300, value=100, step=10)
+ticker = st.text_input("Enter stock ticker (e.g. AAPL, TSLA, NVDA):", "").upper()
 
-    if st.button("Analyze Sentiment"):
-        with st.spinner(f"Fetching tweets for {ticker}..."):
-            tweets = fetch_tweets(ticker, limit)
+if st.button("Analyze Sentiment"):
+    if not ticker:
+        st.warning("Please enter a ticker symbol.")
+    else:
+        st.info(f"Fetching Reddit posts mentioning **{ticker}** ...")
+        posts = fetch_reddit_posts(ticker)
 
-        if not tweets:
-            st.error("No tweets found. Try another ticker.")
-            return
+        if not posts:
+            st.warning("No posts found. Try another ticker.")
+        else:
+            sentiments = [get_sentiment(p) for p in posts]
+            total_score = sum(sentiments)
+            avg_score = total_score / len(posts)
 
-        with st.spinner("Analyzing sentiment..."):
-            df = analyze_sentiment(tweets)
+            st.subheader("🔹 Sentiment Summary")
+            st.write(f"Total Posts Analyzed: {len(posts)}")
+            st.write(f"Overall Sentiment Score: {total_score}")
+            st.write(f"Average Sentiment: {avg_score:.2f}")
 
-        # Summary
-        total_score = df["score"].sum()
-        pos_count = (df["score"] > 0).sum()
-        neg_count = (df["score"] < 0).sum()
-        neu_count = (df["score"] == 0).sum()
-
-        st.success(f"✅ Completed analysis on {len(tweets)} tweets.")
-
-        st.subheader("Sentiment Summary")
-        st.write(f"**Overall Sentiment Score:** {total_score}")
-        st.write(f"👍 Positive tweets: {pos_count}")
-        st.write(f"👎 Negative tweets: {neg_count}")
-        st.write(f"😐 Neutral tweets: {neu_count}")
-
-        chart_data = pd.DataFrame({
-            "Sentiment": ["Positive", "Negative", "Neutral"],
-            "Count": [pos_count, neg_count, neu_count],
-        })
-        st.bar_chart(chart_data.set_index("Sentiment"))
-
-        st.subheader("Sample of analyzed tweets")
-        st.dataframe(df[["tweet", "label", "score"]])
-
-if __name__ == "__main__":
-    main()
+            st.subheader("📝 Example Posts")
+            for p in posts[:5]:
+                s = get_sentiment(p)
+                st.write(f"{'🟢' if s > 0 else '🔴' if s < 0 else '⚪'} {p[:300]}{'...' if len(p)>300 else ''}")
