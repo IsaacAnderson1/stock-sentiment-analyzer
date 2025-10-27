@@ -1,0 +1,6 @@
+streamlit
+snscrape
+transformers
+torch
+pandas
+tqdm
