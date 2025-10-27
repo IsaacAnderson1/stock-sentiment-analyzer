@@ -1,70 +1,55 @@
 import streamlit as st
-import praw  # Reddit API wrapper
+import praw
 import re
+from transformers import pipeline  # <-- Import pipeline
 
-# ---- CONFIGURE REDDIT API ----
-# Create a Reddit app at https://www.reddit.com/prefs/apps
-# and paste your credentials here
-reddit = praw.Reddit(
-    client_id="rR8y6HlQatpqsAi_rQ6RSg",
-    client_secret="MfQGKDlHm8R6i0jAFRLEeGYViq-cfg",
-    user_agent="StockSentimentApp/1.0"
-)
+# ---- AI Model Setup ----
+# This uses @st.cache_resource to load the model only once.
+@st.cache_resource
+def load_classifier():
+    st.info("Loading AI relevance model (this happens once)...")
+    # Load a model trained for Natural Language Inference
+    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# ---- BASIC SENTIMENT RULES ----
-positive_words = ["buy", "bull", "up", "gain", "moon", "green", "profit", "undervalued", "strong"]
-negative_words = ["sell", "bear", "down", "loss", "red", "crash", "overvalued", "weak"]
+classifier = load_classifier()
 
-def get_sentiment(text):
-    text = text.lower()
-    pos = sum(word in text for word in positive_words)
-    neg = sum(word in text for word in negative_words)
-    if pos > neg:
-        return 1
-    elif neg > pos:
-        return -1
-    else:
-        return 0
+# (Rest of your setup: reddit, positive/negative words, get_sentiment)
 
+# ---- MODIFIED: AI-Powered Fetch Function ----
 def fetch_reddit_posts(ticker, limit=100):
-    posts = []
-    # Combine subreddits into one query string
     subreddit_names = "stocks+wallstreetbets+investing"
-    
-    # Get the combined subreddit object
     subreddit = reddit.subreddit(subreddit_names)
-    
-    # Search across all three, sorting by 'new'
-    for submission in subreddit.search(ticker, sort="new", limit=limit):
-        posts.append(submission.title + " " + submission.selftext)
-        
-    return posts
+    search_limit = limit * 3  # Fetch more to filter
 
-# ---- STREAMLIT UI ----
-st.title("📈 Reddit Stock Sentiment Analyzer")
+    # The labels we will classify each post against
+    candidate_labels = ["about stock market investing", "not about stocks"]
 
-ticker = st.text_input("Enter stock ticker (e.g. AAPL, TSLA, NVDA):", "").upper()
+    texts_to_check = []
+    original_posts = []
 
-if st.button("Analyze Sentiment"):
-    if not ticker:
-        st.warning("Please enter a ticker symbol.")
-    else:
-        st.info(f"Fetching Reddit posts mentioning **{ticker}** ...")
-        posts = fetch_reddit_posts(ticker)
+    # 1. Gather posts from Reddit
+    for submission in subreddit.search(ticker, sort="new", limit=search_limit):
+        full_text = submission.title + " " + submission.selftext
+        # Truncate text for the model (models have a size limit)
+        texts_to_check.append(full_text[:512]) 
+        original_posts.append(full_text)
 
-        if not posts:
-            st.warning("No posts found. Try another ticker.")
-        else:
-            sentiments = [get_sentiment(p) for p in posts]
-            total_score = sum(sentiments)
-            avg_score = total_score / len(posts)
+    if not texts_to_check:
+        return []
 
-            st.subheader("🔹 Sentiment Summary")
-            st.write(f"Total Posts Analyzed: {len(posts)}")
-            st.write(f"Overall Sentiment Score: {total_score}")
-            st.write(f"Average Sentiment: {avg_score:.2f}")
+    # 2. Classify all posts in one batch (this is the slow "AI" part)
+    results = classifier(texts_to_check, candidate_labels)
 
-            st.subheader("📝 Example Posts")
-            for p in posts[:5]:
-                s = get_sentiment(p)
-                st.write(f"{'🟢' if s > 0 else '🔴' if s < 0 else '⚪'} {p[:300]}{'...' if len(p)>300 else ''}")
+    # 3. Filter the posts based on the AI's classification
+    relevant_posts = []
+    for original_text, result in zip(original_posts, results):
+        # Check if the AI's top-scoring label is the one we want
+        if result['labels'][0] == "about stock market investing":
+            relevant_posts.append(original_text)
+
+        if len(relevant_posts) >= limit:
+            break
+
+    return relevant_posts
+
+# (Rest of your Streamlit UI code...)
