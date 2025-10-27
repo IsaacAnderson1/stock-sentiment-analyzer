@@ -1,3 +1,4 @@
 streamlit
 snscrape==0.6.2.20230320
 pandas
+praw
