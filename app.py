@@ -9,7 +9,7 @@ from transformers import pipeline  # <-- Import pipeline
 def load_classifier():
     st.info("Loading AI relevance model (this happens once)...")
     # Load a model trained for Natural Language Inference
-    return pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+    return pipeline("zero-shot-classification", model="valhalla/distilbart-mnli-12-3")
 
 classifier = load_classifier()
 
