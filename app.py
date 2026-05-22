@@ -5,8 +5,8 @@ import re
 # ---- CONFIGURE REDDIT API ----
 # (Your credentials here)
 reddit = praw.Reddit(
-    client_id="rR8y6HlQatpqsAi_rQ6RSg",
-    client_secret="MfQGKDlHm8R6i0jAFRLEeGYViq-cfg",
+    client_id="key",
+    client_secret="key-cfg",
     user_agent="StockSentimentApp/1.0"
 )
 
