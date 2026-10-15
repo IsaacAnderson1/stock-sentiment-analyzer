@@ -1,12 +1,19 @@
 import streamlit as st
 import praw
 import re
+import os
 
 # ---- CONFIGURE REDDIT API ----
-# (Your credentials here)
+client_id = os.getenv("REDDIT_CLIENT_ID")
+client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+
+if not client_id or not client_secret:
+    st.error("Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET before running the app.")
+    st.stop()
+
 reddit = praw.Reddit(
-    client_id="key",
-    client_secret="key-cfg",
+    client_id=client_id,
+    client_secret=client_secret,
     user_agent="StockSentimentApp/1.0"
 )
 
